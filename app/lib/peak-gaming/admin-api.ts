@@ -2,15 +2,11 @@ import { SLOTS_ENDPOINT } from "./booking-config";
 import type { DayStats } from "./admin-stats";
 import type { Reservation } from "./booking-types";
 
-// Same X-Admin-Key default the backend ships with (app.admin.api-key); override
-// via NEXT_PUBLIC_ADMIN_API_KEY for a real deployment.
-const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY ?? "peak2026";
-
 /** True when the wizard/admin panel should talk to the real backend instead of localStorage. */
 export const ADMIN_API_ENABLED = !!SLOTS_ENDPOINT;
 
-function adminHeaders(): HeadersInit {
-  return { "Content-Type": "application/json", "X-Admin-Key": ADMIN_KEY };
+function adminHeaders(adminKey: string): HeadersInit {
+  return { "Content-Type": "application/json", "X-Admin-Key": adminKey };
 }
 
 export async function fetchDay(date: string): Promise<Reservation[]> {
@@ -20,9 +16,14 @@ export async function fetchDay(date: string): Promise<Reservation[]> {
   return j.rezervari ?? [];
 }
 
-export async function fetchDayStats(date: string): Promise<DayStats> {
+/**
+ * Also doubles as the admin-key check: the backend rejects this call with
+ * 401 unless X-Admin-Key is correct, so there's no separate client-side
+ * password to keep in sync (or leak) — the real key is the only key.
+ */
+export async function fetchDayStats(date: string, adminKey: string): Promise<DayStats> {
   const r = await fetch(`${SLOTS_ENDPOINT}/stats?data=${encodeURIComponent(date)}`, {
-    headers: adminHeaders(),
+    headers: adminHeaders(adminKey),
   });
   if (!r.ok) throw new Error(`Failed to load stats for ${date}: ${r.status}`);
   const j = await r.json();
@@ -35,10 +36,10 @@ export async function fetchDayStats(date: string): Promise<DayStats> {
   };
 }
 
-export async function updateReservationStatus(id: number, stare: Reservation["stare"]): Promise<void> {
+export async function updateReservationStatus(id: number, stare: Reservation["stare"], adminKey: string): Promise<void> {
   const r = await fetch(`${SLOTS_ENDPOINT}/${id}/stare`, {
     method: "PATCH",
-    headers: adminHeaders(),
+    headers: adminHeaders(adminKey),
     body: JSON.stringify({ stare }),
   });
   if (!r.ok) throw new Error(`Failed to update reservation ${id}: ${r.status}`);

@@ -10,7 +10,10 @@ import { AdminDayRows } from "./admin/admin-day-rows";
 import { AdminGate } from "./admin/admin-gate";
 
 export function AdminPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [unlocked, setUnlocked] = useState(false);
+  // Holds the admin key only after AdminGate has verified it against the
+  // backend; never persisted, never hardcoded — see admin-gate.tsx.
+  const [adminKey, setAdminKey] = useState<string | null>(null);
+  const unlocked = adminKey !== null;
   const [day, setDay] = useState(() => toISODate(new Date()));
   // Local storage is synchronous, so the list is derived straight from
   // `day` during render; `version` forces a re-read after a write, and also
@@ -27,16 +30,15 @@ export function AdminPanel({ open, onClose }: { open: boolean; onClose: () => vo
   );
 
   // Fetches the day's reservations from the backend whenever the selected
-  // day, unlock state, or a manual refresh (`version`) changes. Guarded
-  // against races: a stale in-flight request from a previous day/version
-  // is ignored if a newer one has already started.
+  // day, admin key, or a manual refresh (`version`) changes. Guarded against
+  // races: a stale in-flight request from a previous day/version is ignored
+  // if a newer one has already started.
   useEffect(() => {
-    if (!ADMIN_API_ENABLED) return;
+    if (!ADMIN_API_ENABLED || !adminKey) return;
     let cancelled = false;
     (async () => {
-      if (!unlocked) return;
       try {
-        const [list, stats] = await Promise.all([fetchDay(day), fetchDayStats(day)]);
+        const [list, stats] = await Promise.all([fetchDay(day), fetchDayStats(day, adminKey)]);
         if (cancelled) return;
         setRemoteList(list.slice().sort((a, b) => a.ora - b.ora));
         setRemoteStats(stats);
@@ -48,7 +50,7 @@ export function AdminPanel({ open, onClose }: { open: boolean; onClose: () => vo
     return () => {
       cancelled = true;
     };
-  }, [unlocked, day, version]);
+  }, [adminKey, day, version]);
 
   useEffect(() => subscribeToReservations(() => setVersion((v) => v + 1)), []);
 
@@ -72,9 +74,9 @@ export function AdminPanel({ open, onClose }: { open: boolean; onClose: () => vo
   async function setReservationState(index: number, state: Reservation["stare"]) {
     if (ADMIN_API_ENABLED) {
       const reservation = remoteList[index];
-      if (reservation?.id == null) return;
+      if (reservation?.id == null || !adminKey) return;
       try {
-        await updateReservationStatus(reservation.id, state);
+        await updateReservationStatus(reservation.id, state, adminKey);
         setVersion((v) => v + 1); // triggers the fetch effect above to reload
       } catch {
         setLoadError("Nu am putut actualiza rezervarea.");
@@ -100,7 +102,7 @@ export function AdminPanel({ open, onClose }: { open: boolean; onClose: () => vo
         </div>
 
         {!unlocked ? (
-          <AdminGate onUnlock={() => setUnlocked(true)} />
+          <AdminGate onUnlock={setAdminKey} />
         ) : (
           <div>
             <div className="ctl">

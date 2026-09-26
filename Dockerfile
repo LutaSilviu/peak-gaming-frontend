@@ -8,8 +8,6 @@ WORKDIR /app
 # NEXT_PUBLIC_* vars are inlined into the client bundle at build time.
 ARG NEXT_PUBLIC_API_URL=http://localhost:8080
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_ADMIN_API_KEY=peak2026
-ENV NEXT_PUBLIC_ADMIN_API_KEY=$NEXT_PUBLIC_ADMIN_API_KEY
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

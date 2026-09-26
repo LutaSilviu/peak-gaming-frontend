@@ -1,18 +1,31 @@
 import { useState } from "react";
+import { fetchDayStats } from "../../lib/peak-gaming/admin-api";
+import { toISODate } from "../../lib/peak-gaming/booking-dates";
 
-const ACCESS_CODE = "peak2026"; // replaced by middleware.ts auth in production
-
-export function AdminGate({ onUnlock }: { onUnlock: () => void }) {
+export function AdminGate({ onUnlock }: { onUnlock: (adminKey: string) => void }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
 
-  function tryUnlock() {
-    if (pin.trim() !== ACCESS_CODE) {
-      setError("Cod greșit.");
+  async function tryUnlock() {
+    const key = pin.trim();
+    if (!key) {
+      setError("Introdu codul de acces.");
       return;
     }
+    setChecking(true);
     setError("");
-    onUnlock();
+    try {
+      // No separate client-side password: this succeeds only if `key`
+      // actually matches the backend's X-Admin-Key, so the real admin key
+      // is the only thing that unlocks the panel — nothing is hardcoded here.
+      await fetchDayStats(toISODate(new Date()), key);
+      onUnlock(key);
+    } catch {
+      setError("Cod greșit.");
+    } finally {
+      setChecking(false);
+    }
   }
 
   return (
@@ -21,13 +34,13 @@ export function AdminGate({ onUnlock }: { onUnlock: () => void }) {
       <p>Panoul e vizibil doar personalului.</p>
       <input
         type="password"
-        placeholder="peak2026"
         autoComplete="off"
         value={pin}
         onChange={(e) => setPin(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && tryUnlock()}
+        disabled={checking}
       />
-      <button onClick={tryUnlock}>Intră</button>
+      <button onClick={tryUnlock} disabled={checking}>{checking ? "Se verifică…" : "Intră"}</button>
       <div className="bad">{error}</div>
     </div>
   );
